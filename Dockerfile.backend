@@ -1,0 +1,26 @@
+
+FROM node:22-bookworm-slim
+
+# Thư mục làm việc của Backend
+WORKDIR /app/myshop-backend
+
+# Sao chép file quản lý thư viện
+COPY myshop-backend/package*.json ./
+
+# Cài thư viện production theo package-lock.json
+RUN npm ci --omit=dev
+
+# Sao chép toàn bộ mã nguồn Backend
+COPY myshop-backend/ ./
+
+# Sao chép dữ liệu sản phẩm mẫu từ Frontend
+COPY myshop-premium/src/data.js /app/myshop-premium/src/data.js
+
+# Môi trường production
+ENV NODE_ENV=production
+
+# Backend sử dụng cổng 4000
+EXPOSE 4000
+
+# Khởi động Backend
+CMD ["npm", "start"]
