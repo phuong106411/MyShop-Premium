@@ -1,15 +1,33 @@
-
+﻿# Node.js dependencies
 node_modules/
 **/node_modules/
 
+# Build output
 dist/
 **/dist/
+build/
+coverage/
 
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
-.git/
-.DS_Store
+# Private keys
+*.pem
+
+# Logs
+*.log
 npm-debug.log*
+
+# System files
+.DS_Store
+
+# Git internals
+.git/
+
+# Local database
 myshop-backend/data/db.json
