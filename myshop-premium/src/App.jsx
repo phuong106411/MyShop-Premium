@@ -662,17 +662,9 @@ function Checkout({ cart, user, placeOrder }) {
   const qrImageUrl =
     `https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNumber}-compact2.png?${qrParams.toString()}`;
 
-  const bankInfoConfigured =
-  Boolean(BANK_INFO.accountNumber?.trim()) &&
-  Boolean(BANK_INFO.accountName?.trim()) &&
-  !["NHAP_SO_TAI_KHOAN", "233456789"].includes(
-    BANK_INFO.accountNumber.trim().toUpperCase()
-  ) &&
-  !["TEN_CHU_TAI_KHOAN", "MY SHOP"].includes(
-    BANK_INFO.accountName.trim().toUpperCase()
-  );
-  if (!cart.length) return <Navigate to="/cart" replace />;
+  const bankInfoConfigured = true;
 
+if (!cart.length) return <Navigate to="/cart" replace />;
   const submit = async (e) => {
     e.preventDefault();
     setError("");
