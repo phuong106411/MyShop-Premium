@@ -64,28 +64,44 @@ function useStore() {
     return data;
   };
 
-  const refresh = async () => {
-    try {
-      const [p, o] = await Promise.all([
-        request("/products"),
-        request("/orders").catch(() => []),
-      ]);
-      setProducts(Array.isArray(p) ? p : []);
-      setOrders(o);
-      setApiError("");
-      try {
-       const users = await request("/users");
-       setAccounts(Array.isArray(users) ? users : users.users || []);
-      } catch {
-        // Chỉ admin xem được danh sách tài khoản.
-      }
-    } catch (e) {
-      setApiError(
-        `Không tải được sản phẩm từ máy chủ: ${e.message}. Hãy kiểm tra Backend tại http://localhost:4000/api/health.`
-      );
-      throw e;
+ const refresh = async () => {
+  try {
+    const p = await request("/products");
+    setProducts(Array.isArray(p) ? p : []);
+
+    const token = localStorage.getItem("ms_token");
+
+    if (!token) {
+      setOrders([]);
+      setAccounts([]);
+      return;
     }
-  };
+
+    try {
+      const o = await request("/orders");
+      setOrders(Array.isArray(o) ? o : []);
+    } catch (e) {
+      console.error("Lỗi tải đơn hàng:", e);
+      setOrders([]);
+    }
+
+    try {
+      const users = await request("/users");
+      setAccounts(
+        Array.isArray(users) ? users : users.users || []
+      );
+    } catch (e) {
+      console.error("Lỗi tải danh sách khách hàng:", e);
+    }
+
+    setApiError("");
+  } catch (e) {
+    setApiError(
+      `Không tải được dữ liệu: ${e.message}`
+    );
+    throw e;
+  }
+};
 
   useEffect(() => {
     refresh().catch((e) =>
@@ -2033,12 +2049,18 @@ function AdminCustomers({ accounts, orders, products }) {
             const customerName =
               account.name || account.fullName || "";
 
+            const accountId = account.id ?? account._id;
+
             const customerOrders = allOrders.filter((order) => {
-              return (
-                getCustomerName(order).trim().toLowerCase() ===
-                String(customerName).trim().toLowerCase()
-              );
-            });
+              if (order.userId && accountId) {
+                return String(order.userId) === String(accountId);
+  }
+
+   return (
+     getCustomerName(order).trim().toLowerCase() ===
+     String(customerName).trim().toLowerCase()
+  );
+});
 
             const totalSpent = customerOrders.reduce(
               (sum, order) => sum + (Number(order.total) || 0),
