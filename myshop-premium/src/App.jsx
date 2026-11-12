@@ -1743,8 +1743,15 @@ export default function App() {
 
         <Route
           path="customers"
-          element={<AdminCustomers accounts={store.accounts} />}
-        />
+          element={
+            <AdminCustomers
+               accounts={store.accounts}
+               orders={store.orders}
+               products={store.products}
+    />
+  }
+/>
+        
 
         <Route
           path="statistics"
@@ -1933,37 +1940,310 @@ function AuthLayout({ title, subtitle, children }) {
 }
 
 
-function AdminCustomers({ accounts }) {
+
+function AdminCustomers({ accounts, orders, products }) {
+  const [expandedCustomer, setExpandedCustomer] = useState(null);
+
   const customers = Array.isArray(accounts)
     ? accounts.filter((account) => account.role !== "admin")
     : [];
 
-  const rows = customers.map((account, index) => [
-    String(account.id ?? account._id ?? index + 1),
-    String(account.name ?? account.fullName ?? "Chưa cập nhật"),
-    String(account.email ?? "Chưa có email"),
-    String(account.phone ?? "Chưa cập nhật"),
-    String(account.createdAt
-      ? new Date(account.createdAt).toLocaleDateString("vi-VN")
-      : "—"),
-    String(account.role ?? "user"),
-  ]);
+  const allOrders = Array.isArray(orders) ? orders : [];
+  const allProducts = Array.isArray(products) ? products : [];
+
+  const getCustomerName = (order) => {
+    if (typeof order.customer === "object" && order.customer !== null) {
+      return order.customer.name || order.customer.fullName || "";
+    }
+
+    return String(order.customer || order.customerName || "");
+  };
+
+  const getOrderItems = (order) => {
+    if (Array.isArray(order.items)) return order.items;
+    if (Array.isArray(order.products)) return order.products;
+    return [];
+  };
+
+  const getProductInfo = (item) => {
+    const productId =
+      item.productId ??
+      item.product?.id ??
+      item.product?._id ??
+      item.id;
+
+    const currentProduct = allProducts.find(
+      (product) =>
+        String(product.id ?? product._id) === String(productId)
+    );
+
+    return {
+      name:
+        item.productName ||
+        item.name ||
+        item.product?.name ||
+        currentProduct?.name ||
+        "Sản phẩm",
+      image:
+        item.image ||
+        item.product?.image ||
+        currentProduct?.image ||
+        "",
+      quantity: Number(item.quantity) || 1,
+      size: item.size || "",
+      price: Number(
+        item.price ??
+        item.product?.price ??
+        currentProduct?.price ??
+        0
+      ),
+    };
+  };
+
+  const getPaymentName = (method) => {
+    if (
+      method === "bank_transfer" ||
+      method === "transfer" ||
+      method === "banking"
+    ) {
+      return "Chuyển khoản";
+    }
+
+    if (method === "momo") return "MoMo";
+    if (method === "cod") return "COD";
+
+    return method || "Chưa xác định";
+  };
 
   return (
-    <AdminTablePage
-      eyebrow="CUSTOMERS"
-      title="Khách hàng"
-      description="Quản lý thông tin tài khoản khách hàng của MyShop."
-      columns={[
-        "Mã khách hàng",
-        "Họ và tên",
-        "Email",
-        "Số điện thoại",
-        "Ngày đăng ký",
-        "Vai trò",
-      ]}
-      rows={rows}
-      empty="Chưa có khách hàng nào."
-    />
+    <div className="admin-page">
+      <div className="page-toolbar">
+        <div>
+          <span>CUSTOMERS</span>
+          <h2>Khách hàng</h2>
+          <p>
+            Theo dõi thông tin và lịch sử mua hàng của từng khách hàng.
+          </p>
+        </div>
+      </div>
+
+      <div className="admin-product-list">
+        {customers.length > 0 ? (
+          customers.map((account, index) => {
+            const customerName =
+              account.name || account.fullName || "";
+
+            const customerOrders = allOrders.filter((order) => {
+              return (
+                getCustomerName(order).trim().toLowerCase() ===
+                String(customerName).trim().toLowerCase()
+              );
+            });
+
+            const totalSpent = customerOrders.reduce(
+              (sum, order) => sum + (Number(order.total) || 0),
+              0
+            );
+
+            const isExpanded =
+              expandedCustomer === String(account.id ?? account._id ?? index);
+
+            return (
+              <section
+                className="panel"
+                key={account.id ?? account._id ?? index}
+                style={{ padding: 20, marginBottom: 18 }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 16,
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: "0 0 8px" }}>
+                      {customerName || "Khách hàng"}
+                    </h3>
+                    <p style={{ margin: "4px 0" }}>
+                      Email: {account.email || "Chưa cập nhật"}
+                    </p>
+                    <p style={{ margin: "4px 0" }}>
+                      Số điện thoại: {account.phone || "Chưa cập nhật"}
+                    </p>
+                  </div>
+
+                  <div style={{ textAlign: "right" }}>
+                    <strong>
+                      {customerOrders.length} đơn hàng
+                    </strong>
+                    <h3 style={{ margin: "8px 0" }}>
+                      {money(totalSpent)}
+                    </h3>
+                    <small>Tổng tiền đã đặt mua</small>
+                  </div>
+
+                  <button
+                    className="admin-primary"
+                    onClick={() =>
+                      setExpandedCustomer(
+                        isExpanded
+                          ? null
+                          : String(account.id ?? account._id ?? index)
+                      )
+                    }
+                  >
+                    {isExpanded ? "Thu gọn" : "Xem lịch sử mua hàng"}
+                  </button>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ marginTop: 24 }}>
+                    <h3>Lịch sử mua hàng</h3>
+
+                    {customerOrders.length > 0 ? (
+                      customerOrders.map((order, orderIndex) => {
+                        const items = getOrderItems(order);
+
+                        return (
+                          <div
+                            key={order.id ?? order._id ?? orderIndex}
+                            style={{
+                              borderTop: "1px solid #e5e5e5",
+                              padding: "18px 0",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                flexWrap: "wrap",
+                                gap: 10,
+                              }}
+                            >
+                              <strong>
+                                Mã đơn: {order.id ?? order._id ?? "—"}
+                              </strong>
+                              <span>
+                                {order.date
+                                  ? new Date(order.date).toLocaleDateString("vi-VN")
+                                  : order.createdAt
+                                    ? new Date(order.createdAt).toLocaleDateString("vi-VN")
+                                    : "—"}
+                              </span>
+                            </div>
+
+                            <div style={{ marginTop: 14 }}>
+                              {items.map((item, itemIndex) => {
+                                const product = getProductInfo(item);
+
+                                return (
+                                  <div
+                                    key={itemIndex}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 14,
+                                      marginBottom: 14,
+                                    }}
+                                  >
+                                    {product.image ? (
+                                      <img
+                                        src={product.image}
+                                        alt={product.name}
+                                        style={{
+                                          width: 76,
+                                          height: 76,
+                                          objectFit: "cover",
+                                          borderRadius: 8,
+                                          background: "#f5f5f5",
+                                        }}
+                                      />
+                                    ) : (
+                                      <div
+                                        style={{
+                                          width: 76,
+                                          height: 76,
+                                          display: "grid",
+                                          placeItems: "center",
+                                          background: "#f2f2f2",
+                                          borderRadius: 8,
+                                          color: "#777",
+                                          fontSize: 12,
+                                        }}
+                                      >
+                                        Chưa có ảnh
+                                      </div>
+                                    )}
+
+                                    <div style={{ flex: 1 }}>
+                                      <strong>{product.name}</strong>
+                                      <p style={{ margin: "5px 0" }}>
+                                        Số lượng: {product.quantity}
+                                        {product.size
+                                          ? ` · Size ${product.size}`
+                                          : ""}
+                                      </p>
+                                      <span>
+                                        {money(product.price)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                flexWrap: "wrap",
+                                gap: 10,
+                                borderTop: "1px dashed #ddd",
+                                paddingTop: 12,
+                              }}
+                            >
+                              <div>
+                                <p>
+                                  Thanh toán:{" "}
+                                  <strong>
+                                    {getPaymentName(order.paymentMethod)}
+                                  </strong>
+                                </p>
+                                <p>
+                                  Trạng thái:{" "}
+                                  <strong>
+                                    {order.status || "Chưa xử lý"}
+                                  </strong>
+                                </p>
+                              </div>
+
+                              <div>
+                                Tổng đơn hàng:
+                                <h3 style={{ margin: "5px 0" }}>
+                                  {money(Number(order.total) || 0)}
+                                </h3>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p>Khách hàng chưa có đơn hàng nào.</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })
+        ) : (
+          <section className="panel" style={{ padding: 24 }}>
+            Chưa có khách hàng nào.
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
