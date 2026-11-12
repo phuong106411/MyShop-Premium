@@ -1368,62 +1368,263 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
 }
 
 
+
 function AdminOrders({ orders }) {
-  const rows = orders.map((o) => {
-    const items = Array.isArray(o.items)
-      ? o.items
-          .map((item) => {
-            if (typeof item === "string") return item;
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
-            if (!item || typeof item !== "object") {
-              return "Sản phẩm";
-            }
+  const getItems = (order) => {
+    if (Array.isArray(order.items)) return order.items;
+    if (Array.isArray(order.lines)) return order.lines;
+    return [];
+  };
 
-            const name =
-              item.productName ||
-              item.name ||
-              item.product?.name ||
-              "Sản phẩm";
+  const getCustomer = (order) => {
+    if (typeof order.customer === "object" && order.customer !== null) {
+      return order.customer.name || order.customer.fullName || "Khách hàng";
+    }
+    return order.customer || order.customerName || "Khách hàng";
+  };
 
-            const quantity = Number(item.quantity) || 0;
-            const size = item.size ? ` (Size ${item.size})` : "";
+  const getPayment = (method) => {
+    if (["bank_transfer", "transfer", "banking"].includes(method)) {
+      return "Chuyển khoản";
+    }
+    if (method === "momo") return "MoMo";
+    if (method === "cod") return "COD";
+    return method || "Chưa xác định";
+  };
 
-            return `${name}${quantity > 0 ? ` x${quantity}` : ""}${size}`;
-          })
-          .join(", ")
-      : typeof o.items === "string"
-        ? o.items
-        : "Chưa có sản phẩm";
+  const getItemName = (item) => {
+    if (typeof item === "string") return item;
+    return item.productName || item.name || item.product?.name || "Sản phẩm";
+  };
 
-    return [
-      String(o.id ?? ""),
-      String(o.customer ?? "Khách hàng"),
-      String(o.date ?? ""),
-      items,
-      money(Number(o.total) || 0),
-      o.paymentMethod === "bank_transfer"
-        ? "Chuyển khoản"
-        : "COD",
-      String(o.status ?? "Chưa xử lý"),
-    ];
+  const rows = (Array.isArray(orders) ? orders : []).map((order) => {
+    const items = getItems(order);
+
+    const itemSummary = items.map((item) => {
+      if (typeof item === "string") return item;
+
+      const name = getItemName(item);
+      const quantity = Number(item.quantity) || 0;
+      const size = item.size ? ` (Size ${item.size})` : "";
+
+      return `${name}${quantity > 0 ? ` x${quantity}` : ""}${size}`;
+    }).join(", ");
+
+    return {
+      order,
+      itemSummary: itemSummary || "Chưa có sản phẩm",
+    };
   });
 
   return (
-    <AdminTablePage
-      eyebrow="ORDERS"
-      title="Đơn hàng"
-      description="Theo dõi và xử lý các đơn hàng."
-      columns={[
-        "Mã đơn",
-        "Khách hàng",
-        "Ngày",
-        "Sản phẩm",
-        "Tổng tiền",
-        "Thanh toán",
-        "Trạng thái",
-      ]}
-      rows={rows}
-    />
+    <div className="admin-page">
+      <div className="page-toolbar">
+        <div>
+          <span>ORDERS</span>
+          <h2>Đơn hàng</h2>
+          <p>Theo dõi và xử lý các đơn hàng.</p>
+        </div>
+      </div>
+
+      <section className="panel admin-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Mã đơn</th>
+              <th>Khách hàng</th>
+              <th>Ngày</th>
+              <th>Sản phẩm</th>
+              <th>Tổng tiền</th>
+              <th>Thanh toán</th>
+              <th>Trạng thái</th>
+              <th>Chi tiết</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {rows.length > 0 ? (
+              rows.map(({ order, itemSummary }, index) => (
+                <tr key={order.id || index}>
+                  <td>{order.id || "—"}</td>
+                  <td>{getCustomer(order)}</td>
+                  <td>{order.date || "—"}</td>
+                  <td>{itemSummary}</td>
+                  <td>{money(Number(order.total) || 0)}</td>
+                  <td>{getPayment(order.paymentMethod)}</td>
+                  <td>
+                    <span className="status done">
+                      {order.status || "Chưa xử lý"}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrder(order)}
+                      style={{
+                        padding: "8px 14px",
+                        border: "1px solid #2563eb",
+                        borderRadius: "6px",
+                        background: "#2563eb",
+                        color: "#fff",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Chi tiết
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={8}>Chưa có đơn hàng.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {selectedOrder && (
+        <div
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setSelectedOrder(null);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "20px",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              color: "#222",
+              width: "100%",
+              maxWidth: "750px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              borderRadius: "12px",
+              padding: "24px",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+            }}>
+              <h2>Chi tiết đơn hàng</h2>
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                style={{
+                  border: "none",
+                  background: "#eee",
+                  borderRadius: "6px",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                }}
+              >
+                Đóng ✕
+              </button>
+            </div>
+
+            <hr />
+
+            <p><strong>Mã đơn:</strong> {selectedOrder.id || "—"}</p>
+            <p><strong>Khách hàng:</strong> {getCustomer(selectedOrder)}</p>
+            <p><strong>Ngày đặt:</strong> {selectedOrder.date || "—"}</p>
+            <p><strong>Số điện thoại:</strong> {selectedOrder.phone || "Chưa có"}</p>
+            <p><strong>Địa chỉ:</strong> {selectedOrder.address || "Chưa có"}</p>
+            <p><strong>Ghi chú:</strong> {selectedOrder.note || "Không có"}</p>
+
+            <h3>Sản phẩm trong đơn</h3>
+
+            {getItems(selectedOrder).map((item, index) => {
+              if (typeof item === "string") {
+                return <p key={index}>{item}</p>;
+              }
+
+              const image = item.image || item.product?.image || "";
+              const name = getItemName(item);
+              const quantity = Number(item.quantity) || 1;
+              const price = Number(item.price) || 0;
+              const subtotal = Number(item.subtotal ?? price * quantity);
+
+              return (
+                <div
+                  key={index}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "14px",
+                    padding: "12px 0",
+                    borderBottom: "1px solid #eee",
+                  }}
+                >
+                  {image ? (
+                    <img
+                      src={image}
+                      alt={name}
+                      style={{
+                        width: "75px",
+                        height: "75px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: "75px",
+                      height: "75px",
+                      background: "#eee",
+                      borderRadius: "8px",
+                    }} />
+                  )}
+
+                  <div style={{ flex: 1 }}>
+                    <strong>{name}</strong>
+                    <p style={{ margin: "5px 0" }}>
+                      Số lượng: {quantity}
+                      {item.size ? ` | Size: ${item.size}` : ""}
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      Đơn giá: {money(price)}
+                    </p>
+                    <strong>Thành tiền: {money(subtotal)}</strong>
+                  </div>
+                </div>
+              );
+            })}
+
+            <hr />
+
+            <p>
+              <strong>Thanh toán:</strong>{" "}
+              {getPayment(selectedOrder.paymentMethod)}
+            </p>
+            <p>
+              <strong>Trạng thái:</strong>{" "}
+              {selectedOrder.status || "Chưa xử lý"}
+            </p>
+
+            <h3 style={{ textAlign: "right" }}>
+              Tổng tiền: {money(Number(selectedOrder.total) || 0)}
+            </h3>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
