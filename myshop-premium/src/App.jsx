@@ -1350,7 +1350,47 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
   );
 }
 
+
 function AdminOrders({ orders }) {
+  const rows = orders.map((o) => {
+    const items = Array.isArray(o.items)
+      ? o.items
+          .map((item) => {
+            if (typeof item === "string") return item;
+
+            if (!item || typeof item !== "object") {
+              return "Sản phẩm";
+            }
+
+            const name =
+              item.productName ||
+              item.name ||
+              item.product?.name ||
+              "Sản phẩm";
+
+            const quantity = Number(item.quantity) || 0;
+            const size = item.size ? ` (Size ${item.size})` : "";
+
+            return `${name}${quantity > 0 ? ` x${quantity}` : ""}${size}`;
+          })
+          .join(", ")
+      : typeof o.items === "string"
+        ? o.items
+        : "Chưa có sản phẩm";
+
+    return [
+      String(o.id ?? ""),
+      String(o.customer ?? "Khách hàng"),
+      String(o.date ?? ""),
+      items,
+      money(Number(o.total) || 0),
+      o.paymentMethod === "bank_transfer"
+        ? "Chuyển khoản"
+        : "COD",
+      String(o.status ?? "Chưa xử lý"),
+    ];
+  });
+
   return (
     <AdminTablePage
       eyebrow="ORDERS"
@@ -1365,40 +1405,12 @@ function AdminOrders({ orders }) {
         "Thanh toán",
         "Trạng thái",
       ]}
-      rows={orders.map((o) => [
-        o.id,
-        o.customer,
-        o.date,
-        o.items,
-        money(o.total),
-        o.paymentMethod === "bank_transfer"
-          ? "Chuyển khoản"
-          : "COD",
-        o.status,
-      ])}
+      rows={rows}
     />
   );
 }
 
-function AdminCustomers({ accounts }) {
-  const customers = accounts.filter((a) => a.role === "user");
 
-  return (
-    <AdminTablePage
-      eyebrow="CUSTOMERS"
-      title="Khách hàng"
-      description="Danh sách tài khoản khách hàng đã đăng ký."
-      columns={["ID", "Họ tên", "Email", "Quyền"]}
-      rows={customers.map((c) => [
-        c.id,
-        c.name,
-        c.email,
-        "Khách hàng",
-      ])}
-      empty="Chưa có User đăng ký."
-    />
-  );
-}
 
 function AdminTablePage({
   eyebrow,
@@ -1408,6 +1420,28 @@ function AdminTablePage({
   rows,
   empty,
 }) {
+  const renderCell = (value) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    if (typeof value === "object") {
+      if (Array.isArray(value)) {
+        return value.map(renderCell).join(", ");
+      }
+
+      return (
+        value.name ||
+        value.productName ||
+        value.title ||
+        value.email ||
+        JSON.stringify(value)
+      );
+    }
+
+    return String(value);
+  };
+
   return (
     <div className="admin-page">
       <div className="page-toolbar">
@@ -1422,27 +1456,38 @@ function AdminTablePage({
         <table>
           <thead>
             <tr>
-              {columns.map((c) => (
-                <th key={c}>{c}</th>
+              {columns.map((column) => (
+                <th key={column}>{column}</th>
               ))}
             </tr>
           </thead>
+
           <tbody>
-            {rows.length ? (
-              rows.map((r, i) => (
-                <tr key={i}>
-                  {r.map((v, j) => (
-                    <td key={j}>
-                      {j === r.length - 1 &&
-                      (String(v).includes("Đã") ||
-                        String(v).includes("Đang") ||
-                        String(v) === "Khách hàng") ? (
-                        <span className="status done">{v}</span>
-                      ) : (
-                        v
-                      )}
-                    </td>
-                  ))}
+            {rows.length > 0 ? (
+              rows.map((row, index) => (
+                <tr key={index}>
+                  {row.map((value, columnIndex) => {
+                    const displayValue = renderCell(value);
+                    const isStatus =
+                      columnIndex === row.length - 1 &&
+                      (
+                        displayValue.includes("Đã") ||
+                        displayValue.includes("Đang") ||
+                        displayValue === "Khách hàng"
+                      );
+
+                    return (
+                      <td key={columnIndex}>
+                        {isStatus ? (
+                          <span className="status done">
+                            {displayValue}
+                          </span>
+                        ) : (
+                          displayValue
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             ) : (
@@ -1458,6 +1503,7 @@ function AdminTablePage({
     </div>
   );
 }
+
 function AdminStatistics({ orders, products }) {
   const revenue = orders.reduce((s, o) => s + o.total, 0);
 
