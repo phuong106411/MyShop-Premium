@@ -74,7 +74,8 @@ function useStore() {
       setOrders(o);
       setApiError("");
       try {
-        setAccounts(await request("/users"));
+       const users = await request("/users");
+       setAccounts(Array.isArray(users) ? users : users.users || []);
       } catch {
         // Chỉ admin xem được danh sách tài khoản.
       }
@@ -1928,5 +1929,41 @@ function AuthLayout({ title, subtitle, children }) {
         </div>
       </div>
     </div>
+  );
+}
+
+
+function AdminCustomers({ accounts }) {
+  const customers = Array.isArray(accounts)
+    ? accounts.filter((account) => account.role !== "admin")
+    : [];
+
+  const rows = customers.map((account, index) => [
+    String(account.id ?? account._id ?? index + 1),
+    String(account.name ?? account.fullName ?? "Chưa cập nhật"),
+    String(account.email ?? "Chưa có email"),
+    String(account.phone ?? "Chưa cập nhật"),
+    String(account.createdAt
+      ? new Date(account.createdAt).toLocaleDateString("vi-VN")
+      : "—"),
+    String(account.role ?? "user"),
+  ]);
+
+  return (
+    <AdminTablePage
+      eyebrow="CUSTOMERS"
+      title="Khách hàng"
+      description="Quản lý thông tin tài khoản khách hàng của MyShop."
+      columns={[
+        "Mã khách hàng",
+        "Họ và tên",
+        "Email",
+        "Số điện thoại",
+        "Ngày đăng ký",
+        "Vai trò",
+      ]}
+      rows={rows}
+      empty="Chưa có khách hàng nào."
+    />
   );
 }
