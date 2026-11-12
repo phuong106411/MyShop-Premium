@@ -23,8 +23,8 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 // THAY các giá trị bên dưới bằng thông tin tài khoản ngân hàng THẬT của cửa hàng.
 const BANK_INFO = {
   bankId: "VCB",
-  accountNumber: "NHAP_SO_TAI_KHOAN",
-  accountName: "TEN_CHU_TAI_KHOAN",
+  accountNumber: "233456789",
+  accountName: "MY SHOP",
 };
 
 function useStore() {
@@ -663,9 +663,14 @@ function Checkout({ cart, user, placeOrder }) {
     `https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNumber}-compact2.png?${qrParams.toString()}`;
 
   const bankInfoConfigured =
-    BANK_INFO.accountNumber !== "NHAP_SO_TAI_KHOAN" &&
-    BANK_INFO.accountName !== "TEN_CHU_TAI_KHOAN";
-
+  Boolean(BANK_INFO.accountNumber?.trim()) &&
+  Boolean(BANK_INFO.accountName?.trim()) &&
+  !["NHAP_SO_TAI_KHOAN", "233456789"].includes(
+    BANK_INFO.accountNumber.trim().toUpperCase()
+  ) &&
+  !["TEN_CHU_TAI_KHOAN", "MY SHOP"].includes(
+    BANK_INFO.accountName.trim().toUpperCase()
+  );
   if (!cart.length) return <Navigate to="/cart" replace />;
 
   const submit = async (e) => {
