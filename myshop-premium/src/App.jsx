@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   NavLink,
   Link,
@@ -9,19 +9,18 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { initialProducts } from "./data";
+import { initialAccounts, initialOrders, initialProducts } from "./data";
 
 const money = (value) =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency: "VND",
     maximumFractionDigits: 0,
-  }).format(Number(value) || 0);
+  }).format(value);
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
-// Thay bằng thông tin ngân hàng thật của cửa hàng.
+// THAY các giá trị bên dưới bằng thông tin tài khoản ngân hàng THẬT của cửa hàng.
 const BANK_INFO = {
   bankId: "VCB",
   accountNumber: "NHAP_SO_TAI_KHOAN",
@@ -33,7 +32,6 @@ function useStore() {
   const [apiError, setApiError] = useState("");
   const [accounts, setAccounts] = useState([]);
   const [orders, setOrders] = useState([]);
-
   const [user, setUser] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("ms_user") || "null");
@@ -41,7 +39,6 @@ function useStore() {
       return null;
     }
   });
-
   const [cart, setCart] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("ms_cart") || "[]");
@@ -52,7 +49,6 @@ function useStore() {
 
   const request = async (path, options = {}) => {
     const token = localStorage.getItem("ms_token");
-
     const response = await fetch(`${API_URL}${path}`, {
       ...options,
       headers: {
@@ -61,15 +57,10 @@ function useStore() {
         ...(options.headers || {}),
       },
     });
-
     const data = await response.json().catch(() => ({}));
-
     if (!response.ok) {
-      throw new Error(
-        data.message || "Có lỗi xảy ra khi kết nối máy chủ."
-      );
+      throw new Error(data.message || "Có lỗi xảy ra khi kết nối máy chủ.");
     }
-
     return data;
   };
 
@@ -79,16 +70,13 @@ function useStore() {
         request("/products"),
         request("/orders").catch(() => []),
       ]);
-
       setProducts(Array.isArray(p) ? p : []);
-      setOrders(Array.isArray(o) ? o : []);
+      setOrders(o);
       setApiError("");
-
       try {
-        const users = await request("/users");
-        setAccounts(Array.isArray(users) ? users : []);
+        setAccounts(await request("/users"));
       } catch {
-        // Chỉ Admin mới được xem danh sách tài khoản.
+        // Chỉ admin xem được danh sách tài khoản.
       }
     } catch (e) {
       setApiError(
@@ -110,16 +98,12 @@ function useStore() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-
       localStorage.setItem("ms_token", result.token);
       localStorage.setItem("ms_user", JSON.stringify(result.user));
-
       setUser(result.user);
       await refresh();
-
       return result.user;
-    } catch (e) {
-      console.error("Đăng nhập thất bại:", e);
+    } catch {
       return false;
     }
   };
@@ -130,13 +114,10 @@ function useStore() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-
       localStorage.setItem("ms_token", result.token);
       localStorage.setItem("ms_user", JSON.stringify(result.user));
-
       setUser(result.user);
       await refresh();
-
       return { ok: true };
     } catch (e) {
       return { ok: false, message: e.message };
@@ -145,31 +126,22 @@ function useStore() {
 
   const logout = () => {
     setUser(null);
-    setAccounts([]);
-    setOrders([]);
-
     localStorage.removeItem("ms_user");
     localStorage.removeItem("ms_token");
   };
 
   const addToCart = (product, size = "") => {
     const cartKey = `${product.id}-${size || "default"}`;
-
     const existing = cart.find(
-      (item) =>
-        (item.cartKey || `${item.id}-default`) === cartKey
+      (item) => (item.cartKey || `${item.id}-default`) === cartKey
     );
-
     const next = existing
       ? cart.map((item) =>
           (item.cartKey || `${item.id}-default`) === cartKey
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
-      : [
-          ...cart,
-          { ...product, size, cartKey, quantity: 1 },
-        ];
+      : [...cart, { ...product, size, cartKey, quantity: 1 }];
 
     setCart(next);
     localStorage.setItem("ms_cart", JSON.stringify(next));
@@ -179,8 +151,7 @@ function useStore() {
     const next =
       quantity <= 0
         ? cart.filter(
-            (item) =>
-              (item.cartKey || `${item.id}-default`) !== cartKey
+            (item) => (item.cartKey || `${item.id}-default`) !== cartKey
           )
         : cart.map((item) =>
             (item.cartKey || `${item.id}-default`) === cartKey
@@ -220,7 +191,6 @@ function useStore() {
 
     setOrders((current) => [result, ...current]);
     clearCart();
-
     return result;
   };
 
@@ -229,16 +199,11 @@ function useStore() {
       method: "POST",
       body: JSON.stringify(product),
     });
-
     setProducts((current) => [created, ...current]);
-    return created;
   };
 
   const deleteProduct = async (id) => {
-    await request(`/products/${id}`, {
-      method: "DELETE",
-    });
-
+    await request(`/products/${id}`, { method: "DELETE" });
     setProducts((current) =>
       current.filter((p) => String(p.id) !== String(id))
     );
@@ -283,58 +248,41 @@ function UserLayout({ user, logout, cartCount, apiError }) {
     <div className="site-shell">
       <header className="site-header">
         <Logo />
-
         <nav className="site-nav">
           <NavLink end to="/">Trang chủ</NavLink>
           <NavLink to="/products">Sản phẩm</NavLink>
           <NavLink to="/sale">Đang sale</NavLink>
           <NavLink to="/about">Giới thiệu</NavLink>
         </nav>
-
         <div className="header-actions">
           <Link className="cart-pill" to="/cart">
             <span>Giỏ hàng</span>
             <b>{cartCount}</b>
           </Link>
-
           {user ? (
             <>
               <span className="hello">
                 Xin chào, <strong>{user.name}</strong>
               </span>
-
               {user.role === "admin" ? (
-                <Link className="outline-btn" to="/admin">
-                  Quản trị
-                </Link>
+                <Link className="outline-btn" to="/admin">Quản trị</Link>
               ) : (
-                <Link className="outline-btn" to="/account">
-                  Tài khoản
-                </Link>
+                <Link className="outline-btn" to="/account">Tài khoản</Link>
               )}
-
               <button className="text-btn" onClick={logout}>
                 Đăng xuất
               </button>
             </>
           ) : (
             <>
-              <Link className="outline-btn" to="/login">
-                Đăng nhập
-              </Link>
-              <Link className="dark-btn small" to="/register">
-                Đăng ký
-              </Link>
+              <Link className="outline-btn" to="/login">Đăng nhập</Link>
+              <Link className="dark-btn small" to="/register">Đăng ký</Link>
             </>
           )}
         </div>
       </header>
 
-      {apiError && (
-        <div className="api-error" role="alert">
-          {apiError}
-        </div>
-      )}
+      {apiError && <div className="api-error" role="alert">{apiError}</div>}
 
       <Outlet />
 
@@ -343,20 +291,17 @@ function UserLayout({ user, logout, cartCount, apiError }) {
           <Logo />
           <p>Minimal essentials cho phong cách sống hiện đại.</p>
         </div>
-
         <div>
           <h4>Khám phá</h4>
           <Link to="/products">Sản phẩm</Link>
           <Link to="/sale">Ưu đãi</Link>
           <Link to="/about">Về MyShop</Link>
         </div>
-
         <div>
           <h4>Hỗ trợ</h4>
           <span>support@myshop.com</span>
           <span>0123 456 789</span>
         </div>
-
         <div>
           <h4>Thanh toán</h4>
           <span>COD · Banking · Momo</span>
@@ -370,13 +315,9 @@ function UserLayout({ user, logout, cartCount, apiError }) {
 function ProductCard({ product, addToCart }) {
   return (
     <article className="product-card">
-      <Link
-        to={`/products/${product.id}`}
-        className="product-image"
-      >
+      <Link to={`/products/${product.id}`} className="product-image">
         <img src={product.image} alt={product.name} />
         <span className="product-badge">{product.badge}</span>
-
         <button
           type="button"
           className="quick-add"
@@ -388,29 +329,19 @@ function ProductCard({ product, addToCart }) {
           +
         </button>
       </Link>
-
       <div className="product-info">
         <div className="product-meta">
           <span>{product.category}</span>
           <span>★ {product.rating}</span>
         </div>
-
-        <Link
-          to={`/products/${product.id}`}
-          className="product-name"
-        >
+        <Link to={`/products/${product.id}`} className="product-name">
           {product.name}
         </Link>
-
         <div className="price-row">
           <strong>{money(product.price)}</strong>
           <del>{money(product.oldPrice)}</del>
         </div>
-
-        <button
-          className="add-btn"
-          onClick={() => addToCart(product)}
-        >
+        <button className="add-btn" onClick={() => addToCart(product)}>
           Thêm vào giỏ
         </button>
       </div>
@@ -426,33 +357,23 @@ function Home({ products, addToCart }) {
       <section className="hero">
         <div className="hero-copy">
           <span className="eyebrow">NEW COLLECTION · 2026</span>
-          <h1>
-            Simple things.
-            <br />
-            <em>Better made.</em>
-          </h1>
-
+          <h1>Simple things.<br /><em>Better made.</em></h1>
           <p>
-            Những món đồ tối giản được tuyển chọn cho nhịp sống hiện đại
-            — tinh tế, dễ phối và dùng lâu.
+            Những món đồ tối giản được tuyển chọn cho nhịp sống hiện đại —
+            tinh tế, dễ phối và dùng lâu.
           </p>
-
           <div className="hero-actions">
             <Link className="dark-btn" to="/products">
               Khám phá sản phẩm <span>↗</span>
             </Link>
-            <Link className="link-btn" to="/sale">
-              Xem ưu đãi
-            </Link>
+            <Link className="link-btn" to="/sale">Xem ưu đãi</Link>
           </div>
         </div>
-
         <div className="hero-visual">
           <img
             src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=90"
             alt="New collection"
           />
-
           <div className="hero-float">
             <span>CURATED</span>
             <strong>08 essentials</strong>
@@ -473,18 +394,11 @@ function Home({ products, addToCart }) {
             <span className="eyebrow">CURATED FOR YOU</span>
             <h2>Sản phẩm nổi bật</h2>
           </div>
-          <Link className="link-btn" to="/products">
-            Xem tất cả ↗
-          </Link>
+          <Link className="link-btn" to="/products">Xem tất cả ↗</Link>
         </div>
-
         <div className="product-grid">
           {featured.map((p) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              addToCart={addToCart}
-            />
+            <ProductCard key={p.id} product={p} addToCart={addToCart} />
           ))}
         </div>
       </section>
@@ -492,20 +406,15 @@ function Home({ products, addToCart }) {
       <section className="editorial">
         <div>
           <span className="eyebrow">THE MYSHOP EDIT</span>
-          <h2>
-            Ít hơn, nhưng
-            <br />
-            <em>tốt hơn.</em>
-          </h2>
+          <h2>Ít hơn, nhưng<br /><em>tốt hơn.</em></h2>
           <p>
-            Chúng tôi tin một tủ đồ đẹp không cần quá nhiều món.
-            Chỉ cần đúng chất liệu, đúng phom dáng và đúng cá tính.
+            Chúng tôi tin một tủ đồ đẹp không cần quá nhiều món. Chỉ cần
+            đúng chất liệu, đúng phom dáng và đúng cá tính.
           </p>
           <Link className="dark-btn" to="/about">
             Câu chuyện MyShop ↗
           </Link>
         </div>
-
         <img
           src="https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?auto=format&fit=crop&w=1200&q=90"
           alt="MyShop edit"
@@ -518,18 +427,13 @@ function Home({ products, addToCart }) {
 function ProductsPage({ products, addToCart, saleOnly = false }) {
   const [category, setCategory] = useState("Tất cả");
   const [query, setQuery] = useState("");
-
-  const categories = [
-    "Tất cả",
-    ...new Set(products.map((p) => p.category)),
-  ];
+  const categories = ["Tất cả", ...new Set(products.map((p) => p.category))];
 
   const filtered = products.filter(
     (p) =>
       (category === "Tất cả" || p.category === category) &&
-      (!query ||
-        p.name.toLowerCase().includes(query.toLowerCase())) &&
-      (!saleOnly || Number(p.oldPrice) > Number(p.price))
+      (!query || p.name.toLowerCase().includes(query.toLowerCase())) &&
+      (!saleOnly || p.oldPrice > p.price)
   );
 
   return (
@@ -542,7 +446,6 @@ function ProductsPage({ products, addToCart, saleOnly = false }) {
           <h1>{saleOnly ? "Đang sale" : "Tất cả sản phẩm"}</h1>
           <p>{filtered.length} sản phẩm được tuyển chọn.</p>
         </div>
-
         <input
           className="search-input"
           value={query}
@@ -565,11 +468,7 @@ function ProductsPage({ products, addToCart, saleOnly = false }) {
 
       <div className="product-grid">
         {filtered.map((p) => (
-          <ProductCard
-            key={p.id}
-            product={p}
-            addToCart={addToCart}
-          />
+          <ProductCard key={p.id} product={p} addToCart={addToCart} />
         ))}
       </div>
     </section>
@@ -579,13 +478,8 @@ function ProductsPage({ products, addToCart, saleOnly = false }) {
 function ProductDetail({ products, addToCart }) {
   const { pathname } = useLocation();
   const [selectedSize, setSelectedSize] = useState("M");
-
-  // Hỗ trợ cả ID dạng số và ID dạng chuỗi.
-  const id = pathname.split("/").pop();
-
-  const product = products.find(
-    (p) => String(p.id) === String(id)
-  );
+  const id = Number(pathname.split("/").pop());
+  const product = products.find((p) => p.id === id);
 
   if (!product) return <Navigate to="/products" replace />;
 
@@ -594,24 +488,16 @@ function ProductDetail({ products, addToCart }) {
       <div className="detail-image">
         <img src={product.image} alt={product.name} />
       </div>
-
       <div className="detail-copy">
-        <span className="eyebrow">
-          {product.category} · {product.badge}
-        </span>
-
+        <span className="eyebrow">{product.category} · {product.badge}</span>
         <h1>{product.name}</h1>
-
         <div className="detail-rating">
           ★★★★★ <span>{product.rating} · {product.sold} đã bán</span>
         </div>
-
         <div className="detail-price">
           {money(product.price)} <del>{money(product.oldPrice)}</del>
         </div>
-
         <p>{product.description}</p>
-
         <div className="size-row">
           <span>Kích thước</span>
           {["S", "M", "L", "XL"].map((size) => (
@@ -626,14 +512,12 @@ function ProductDetail({ products, addToCart }) {
             </button>
           ))}
         </div>
-
         <button
           className="dark-btn wide"
           onClick={() => addToCart(product, selectedSize)}
         >
           Thêm vào giỏ hàng · Size {selectedSize} <span>→</span>
         </button>
-
         <div className="detail-benefits">
           <span>✓ Miễn phí vận chuyển từ 500K</span>
           <span>✓ Đổi trả trong 7 ngày</span>
@@ -643,10 +527,9 @@ function ProductDetail({ products, addToCart }) {
     </section>
   );
 }
-
 function CartPage({ cart, updateCart }) {
   const total = cart.reduce(
-    (sum, item) => sum + Number(item.price) * item.quantity,
+    (sum, item) => sum + item.price * item.quantity,
     0
   );
 
@@ -673,19 +556,14 @@ function CartPage({ cart, updateCart }) {
         <div className="cart-layout">
           <div className="cart-items">
             {cart.map((item) => (
-              <div
-                className="cart-item"
-                key={item.cartKey || item.id}
-              >
+              <div className="cart-item" key={item.cartKey || item.id}>
                 <img src={item.image} alt={item.name} />
-
                 <div className="cart-item-copy">
                   <span>{item.category}</span>
                   <h3>{item.name}</h3>
                   {item.size && <span>Size: {item.size}</span>}
                   <strong>{money(item.price)}</strong>
                 </div>
-
                 <div className="qty">
                   <button
                     onClick={() =>
@@ -709,14 +587,10 @@ function CartPage({ cart, updateCart }) {
                     +
                   </button>
                 </div>
-
                 <button
                   className="remove"
                   onClick={() =>
-                    updateCart(
-                      item.cartKey || `${item.id}-default`,
-                      0
-                    )
+                    updateCart(item.cartKey || `${item.id}-default`, 0)
                   }
                 >
                   ×
@@ -756,7 +630,6 @@ function CartPage({ cart, updateCart }) {
 
 function Checkout({ cart, user, placeOrder }) {
   const navigate = useNavigate();
-
   const [form, setForm] = useState({
     name: user?.name || "",
     phone: "",
@@ -766,16 +639,16 @@ function Checkout({ cart, user, placeOrder }) {
   });
 
   const total = cart.reduce(
-    (sum, item) => sum + Number(item.price) * item.quantity,
+    (sum, item) => sum + item.price * item.quantity,
     0
   );
-
   const shippingFee = total >= 500000 ? 0 : 30000;
   const grandTotal = total + shippingFee;
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Mã tham chiếu được tạo một lần cho đơn hàng đang checkout.
   const [paymentReference] = useState(
     () => `MS${Date.now().toString().slice(-8)}`
   );
@@ -808,7 +681,6 @@ function Checkout({ cart, user, placeOrder }) {
             ? paymentReference
             : "",
       });
-
       navigate("/order-success");
     } catch (err) {
       setError(err.message);
@@ -833,8 +705,16 @@ function Checkout({ cart, user, placeOrder }) {
           {[
             ["name", "Họ và tên", "Nguyễn Văn A"],
             ["phone", "Số điện thoại", "0123 456 789"],
-            ["address", "Địa chỉ nhận hàng", "Số nhà, đường, phường/xã..."],
-            ["note", "Ghi chú", "Ghi chú cho người giao hàng (không bắt buộc)"],
+            [
+              "address",
+              "Địa chỉ nhận hàng",
+              "Số nhà, đường, phường/xã...",
+            ],
+            [
+              "note",
+              "Ghi chú",
+              "Ghi chú cho người giao hàng (không bắt buộc)",
+            ],
           ].map(([key, label, placeholder]) => (
             <label key={key}>
               {label}
@@ -870,7 +750,8 @@ function Checkout({ cart, user, placeOrder }) {
               <span className="payment-option-copy">
                 <strong>Chuyển khoản ngân hàng</strong>
                 <small>
-                  Thanh toán bằng cách chuyển khoản trước khi đơn hàng được xử lý.
+                  Thanh toán bằng cách chuyển khoản trước khi đơn hàng
+                  được xử lý.
                 </small>
               </span>
             </label>
@@ -878,9 +759,15 @@ function Checkout({ cart, user, placeOrder }) {
             {form.paymentMethod === "bank_transfer" && (
               <div className="bank-details">
                 <strong>Thông tin tài khoản nhận thanh toán</strong>
-                <p>Ngân hàng: <b>{BANK_INFO.bankId}</b></p>
-                <p>Chủ tài khoản: <b>{BANK_INFO.accountName}</b></p>
-                <p>Số tài khoản: <b>{BANK_INFO.accountNumber}</b></p>
+                <p>
+                  Ngân hàng: <b>{BANK_INFO.bankId}</b>
+                </p>
+                <p>
+                  Chủ tài khoản: <b>{BANK_INFO.accountName}</b>
+                </p>
+                <p>
+                  Số tài khoản: <b>{BANK_INFO.accountNumber}</b>
+                </p>
 
                 <div
                   className="bank-qr"
@@ -916,14 +803,14 @@ function Checkout({ cart, user, placeOrder }) {
                     />
                   ) : (
                     <p style={{ color: "#b45309" }}>
-                      Bạn cần thay số tài khoản và tên chủ tài khoản trong BANK_INFO ở đầu file App.jsx để tạo mã QR.
+                      Bạn cần thay số tài khoản và tên chủ tài khoản
+                      trong BANK_INFO ở đầu file App.jsx để tạo mã QR.
                     </p>
                   )}
 
                   <p style={{ margin: "10px 0" }}>
                     Số tiền thanh toán: <b>{money(grandTotal)}</b>
                   </p>
-
                   <p style={{ margin: "10px 0" }}>
                     Nội dung chuyển khoản: <b>{paymentReference}</b>
                   </p>
@@ -938,8 +825,15 @@ function Checkout({ cart, user, placeOrder }) {
                     Sao chép nội dung chuyển khoản
                   </button>
 
-                  <small style={{ display: "block", marginTop: 12, color: "#777" }}>
-                    Vui lòng kiểm tra đúng tên người nhận, số tiền và nội dung trước khi chuyển khoản.
+                  <small
+                    style={{
+                      display: "block",
+                      marginTop: 12,
+                      color: "#777",
+                    }}
+                  >
+                    Vui lòng kiểm tra đúng tên người nhận, số tiền và
+                    nội dung trước khi chuyển khoản.
                   </small>
                 </div>
               </div>
@@ -982,7 +876,6 @@ function Checkout({ cart, user, placeOrder }) {
 
         <aside className="summary">
           <span className="eyebrow">YOUR ORDER</span>
-
           {cart.map((item) => (
             <div className="mini-line" key={item.cartKey || item.id}>
               <span>
@@ -992,14 +885,11 @@ function Checkout({ cart, user, placeOrder }) {
               <strong>{money(item.price * item.quantity)}</strong>
             </div>
           ))}
-
           <hr />
-
           <div className="summary-total">
             <span>Tổng</span>
             <strong>{money(grandTotal)}</strong>
           </div>
-
           <p className="checkout-payment-summary">
             Thanh toán:{" "}
             {form.paymentMethod === "cod"
@@ -1017,31 +907,32 @@ function About() {
     <section className="about-page section">
       <span className="eyebrow">ABOUT MYSHOP</span>
       <h1>
-        Thiết kế tốt
-        <br />
+        Thiết kế tốt<br />
         <em>cho đời sống thật.</em>
       </h1>
       <p className="lead">
-        MyShop là cửa hàng trực tuyến tập trung vào trải nghiệm mua sắm tối giản, hiện đại và dễ sử dụng.
+        MyShop là một cửa hàng frontend demo tập trung vào trải nghiệm
+        mua sắm tối giản, hiện đại và dễ sử dụng.
       </p>
-
       <div className="about-grid">
         <img
           src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=90"
           alt="Store"
         />
-
         <div>
           <h2>
-            Less noise.
-            <br />
+            Less noise.<br />
             More character.
           </h2>
           <p>
-            Từ cách trình bày sản phẩm đến thanh toán, mọi chi tiết được thiết kế theo tinh thần xám trắng, khoảng thở lớn và typography rõ ràng.
+            Từ cách trình bày sản phẩm đến thanh toán, mọi chi tiết được
+            thiết kế theo tinh thần xám trắng, khoảng thở lớn và
+            typography rõ ràng.
           </p>
           <p>
-            MyShop sử dụng React.js kết hợp Backend để quản lý sản phẩm, tài khoản và đơn hàng.
+            Đây là dự án frontend React.js, dữ liệu được lưu trên
+            localStorage để bạn có thể demo các luồng user và admin mà
+            không cần backend.
           </p>
         </div>
       </div>
@@ -1050,17 +941,12 @@ function About() {
 }
 
 function Account({ user, orders }) {
-  const mine = orders.filter(
-    (o) =>
-      String(o.userId || "") === String(user.id || "") ||
-      o.customer === user.name
-  );
+  const mine = orders.filter((o) => o.customer === user.name);
 
   return (
     <section className="section account">
       <span className="eyebrow">MY ACCOUNT</span>
       <h1>Xin chào, {user.name}</h1>
-
       <div className="account-grid">
         <div className="account-card">
           <span>Họ tên</span>
@@ -1070,10 +956,8 @@ function Account({ user, orders }) {
           <span>Vai trò</span>
           <strong>Khách hàng</strong>
         </div>
-
         <div className="account-card">
           <span>Đơn hàng gần đây</span>
-
           {mine.length ? (
             mine.map((o) => (
               <div className="order-mini" key={o.id}>
@@ -1106,10 +990,9 @@ function Success() {
     </section>
   );
 }
-
 /* ---------------- ADMIN ---------------- */
 
-function AdminLayout({ user, logout, orders }) {
+function AdminLayout({ user, logout, products, orders }) {
   const nav = [
     ["/admin", "▦", "Dashboard", true],
     ["/admin/products", "◇", "Sản phẩm"],
@@ -1126,7 +1009,6 @@ function AdminLayout({ user, logout, orders }) {
         <Link className="admin-logo" to="/admin">
           My<span>Shop</span>
         </Link>
-
         <span className="admin-subtitle">ADMIN PANEL</span>
         <div className="admin-divider"></div>
         <span className="admin-section-title">WORKSPACE</span>
@@ -1142,7 +1024,6 @@ function AdminLayout({ user, logout, orders }) {
         </nav>
 
         <span className="admin-section-title">MANAGEMENT</span>
-
         <nav className="admin-nav">
           {nav.slice(4).map(([path, icon, label]) => (
             <NavLink key={path} to={path}>
@@ -1156,12 +1037,10 @@ function AdminLayout({ user, logout, orders }) {
           <div className="avatar">
             {user?.name?.charAt(0).toUpperCase() || "A"}
           </div>
-
           <div>
             <strong>{user?.name || "Administrator"}</strong>
             <small>Quản trị viên</small>
           </div>
-
           <button onClick={logout}>⋮</button>
         </div>
       </aside>
@@ -1173,13 +1052,11 @@ function AdminLayout({ user, logout, orders }) {
             <h1>Dashboard</h1>
             <p>Tổng quan hoạt động MyShop hôm nay.</p>
           </div>
-
           <div className="admin-date">
             <span>HÔM NAY</span>
             <strong>{new Date().toLocaleDateString("vi-VN")}</strong>
           </div>
         </header>
-
         <Outlet />
       </main>
     </div>
@@ -1204,12 +1081,7 @@ function StatCard({ icon, label, value, trend }) {
 
 function AdminDashboard({ products, orders, accounts }) {
   const customers = accounts.filter((a) => a.role === "user");
-
-  const revenue = orders.reduce(
-    (sum, o) => sum + Number(o.total || 0),
-    0
-  );
-
+  const revenue = orders.reduce((sum, o) => sum + o.total, 0);
   const bars = [35, 52, 43, 68, 55, 82, 92];
 
   return (
@@ -1219,19 +1091,34 @@ function AdminDashboard({ products, orders, accounts }) {
           <span>MYSHOP PREMIUM</span>
           <h2>Xin chào, Administrator.</h2>
           <p>
-            Đây là tổng quan hoạt động của cửa hàng. Chúc bạn một ngày làm việc hiệu quả.
+            Đây là tổng quan hoạt động của cửa hàng. Chúc bạn một ngày
+            làm việc hiệu quả.
           </p>
         </div>
-
         <div className="live-status">
           <i></i> Hệ thống đang hoạt động
         </div>
       </section>
 
       <div className="stats-grid">
-        <StatCard icon="◇" label="Tổng sản phẩm" value={products.length} trend="12.5" />
-        <StatCard icon="□" label="Tổng đơn hàng" value={orders.length} trend="8.2" />
-        <StatCard icon="♙" label="Khách hàng" value={customers.length} trend="15.0" />
+        <StatCard
+          icon="◇"
+          label="Tổng sản phẩm"
+          value={products.length}
+          trend="12.5"
+        />
+        <StatCard
+          icon="□"
+          label="Tổng đơn hàng"
+          value={orders.length}
+          trend="8.2"
+        />
+        <StatCard
+          icon="♙"
+          label="Khách hàng"
+          value={customers.length}
+          trend="15.0"
+        />
         <StatCard
           icon="₫"
           label="Doanh thu"
@@ -1265,7 +1152,9 @@ function AdminDashboard({ products, orders, accounts }) {
                   className={i === 6 ? "bar current" : "bar"}
                   style={{ height: `${h}%` }}
                 ></div>
-                <small>{["T2", "T3", "T4", "T5", "T6", "T7", "CN"][i]}</small>
+                <small>
+                  {["T2", "T3", "T4", "T5", "T6", "T7", "CN"][i]}
+                </small>
               </div>
             ))}
           </div>
@@ -1289,7 +1178,6 @@ function AdminDashboard({ products, orders, accounts }) {
               </span>
               <b>75%</b>
             </div>
-
             <div>
               <i>◇</i>
               <span>
@@ -1298,7 +1186,6 @@ function AdminDashboard({ products, orders, accounts }) {
               </span>
               <b>100%</b>
             </div>
-
             <div>
               <i>♙</i>
               <span>
@@ -1307,7 +1194,6 @@ function AdminDashboard({ products, orders, accounts }) {
               </span>
               <b>+15%</b>
             </div>
-
             <div>
               <i>₫</i>
               <span>
@@ -1344,20 +1230,17 @@ function AdminDashboard({ products, orders, accounts }) {
                 <th>Trạng thái</th>
               </tr>
             </thead>
-
             <tbody>
               {orders.slice(0, 5).map((o) => (
                 <tr key={o.id}>
                   <td><strong>{o.id}</strong></td>
                   <td>{o.customer}</td>
-                  <td>{o.date || o.createdAt}</td>
+                  <td>{o.date}</td>
                   <td>{money(o.total)}</td>
                   <td>
                     <span
                       className={`status ${
-                        String(o.status || "").includes("Đã")
-                          ? "done"
-                          : "pending"
+                        o.status.includes("Đã") ? "done" : "pending"
                       }`}
                     >
                       {o.status}
@@ -1375,9 +1258,6 @@ function AdminDashboard({ products, orders, accounts }) {
 
 function AdminProducts({ products, addProduct, deleteProduct }) {
   const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-
   const [form, setForm] = useState({
     name: "",
     category: "Thời trang",
@@ -1389,40 +1269,10 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
       "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=85",
   });
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    setError("");
-    setSaving(true);
-
-    try {
-      await addProduct(form);
-      setShow(false);
-
-      setForm({
-        name: "",
-        category: "Thời trang",
-        price: 299000,
-        oldPrice: 399000,
-        badge: "NEW",
-        description: "",
-        image:
-          "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=85",
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Bạn có chắc muốn xóa sản phẩm này?")) return;
-
-    try {
-      await deleteProduct(id);
-    } catch (err) {
-      alert(err.message);
-    }
+    addProduct(form);
+    setShow(false);
   };
 
   return (
@@ -1433,7 +1283,6 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
           <h2>Sản phẩm</h2>
           <p>Quản lý danh mục sản phẩm của MyShop.</p>
         </div>
-
         <button
           className="admin-primary"
           onClick={() => setShow(!show)}
@@ -1452,7 +1301,6 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
               setForm({ ...form, name: e.target.value })
             }
           />
-
           <input
             required
             type="number"
@@ -1462,7 +1310,6 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
               setForm({ ...form, price: Number(e.target.value) })
             }
           />
-
           <input
             type="number"
             placeholder="Giá cũ"
@@ -1471,7 +1318,6 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
               setForm({ ...form, oldPrice: Number(e.target.value) })
             }
           />
-
           <input
             placeholder="URL ảnh"
             value={form.image}
@@ -1479,27 +1325,24 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
               setForm({ ...form, image: e.target.value })
             }
           />
-
-          <button className="admin-primary" disabled={saving}>
-            {saving ? "Đang lưu..." : "Lưu sản phẩm"}
-          </button>
-
-          {error && <p className="form-error">{error}</p>}
+          <button className="admin-primary">Lưu sản phẩm</button>
         </form>
       )}
 
       <div className="admin-product-list">
         {products.map((p) => (
           <div className="admin-product-row" key={p.id}>
-            <img src={p.image} alt={p.name} />
+            <img src={p.image} alt="" />
             <div>
               <strong>{p.name}</strong>
-              <span>{p.category} · {money(p.price)}</span>
+              <span>
+                {p.category} · {money(p.price)}
+              </span>
             </div>
             <span className="status done">{p.badge}</span>
             <button
               className="delete-btn"
-              onClick={() => handleDelete(p.id)}
+              onClick={() => deleteProduct(p.id)}
             >
               Xóa
             </button>
@@ -1511,322 +1354,32 @@ function AdminProducts({ products, addProduct, deleteProduct }) {
 }
 
 function AdminOrders({ orders }) {
-  const [selectedOrder, setSelectedOrder] = useState(null);
-
-  const getItems = (order) =>
-    Array.isArray(order?.items) ? order.items : [];
-
-  const getOrderDate = (order) => {
-    const value = order?.createdAt || order?.date;
-
-    if (!value) return "Chưa có thông tin";
-
-    const date = new Date(value);
-
-    return Number.isNaN(date.getTime())
-      ? String(value)
-      : date.toLocaleString("vi-VN");
-  };
-
-  const getItemName = (item) =>
-    item.name ||
-    item.productName ||
-    `Sản phẩm #${item.productId || item.id || "?"}`;
-
-  const getItemPrice = (item) =>
-    Number(item.price || item.unitPrice || 0);
-
   return (
-    <div className="admin-page">
-      <div className="page-toolbar">
-        <div>
-          <span>ORDERS</span>
-          <h2>Đơn hàng</h2>
-          <p>
-            Xem khách hàng đã mua sản phẩm nào, số lượng, kích cỡ và thông tin thanh toán.
-          </p>
-        </div>
-      </div>
-
-      <section className="panel admin-table">
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Mã đơn</th>
-                <th>Khách hàng</th>
-                <th>Ngày</th>
-                <th>Sản phẩm</th>
-                <th>Tổng tiền</th>
-                <th>Thanh toán</th>
-                <th>Trạng thái</th>
-                <th>Chi tiết</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {orders.length ? (
-                orders.map((order) => {
-                  const items = getItems(order);
-
-                  const itemCount = items.reduce(
-                    (sum, item) =>
-                      sum + Number(item.quantity || 1),
-                    0
-                  );
-
-                  return (
-                    <tr key={order.id}>
-                      <td><strong>{order.id}</strong></td>
-                      <td>{order.customer || "Chưa có thông tin"}</td>
-                      <td>{getOrderDate(order)}</td>
-                      <td>
-                        {items.length
-                          ? `${items.length} loại · ${itemCount} sản phẩm`
-                          : "Không có dữ liệu"}
-                      </td>
-                      <td>
-                        <strong>{money(order.total)}</strong>
-                      </td>
-                      <td>
-                        {order.paymentMethod === "bank_transfer"
-                          ? "Chuyển khoản"
-                          : "COD"}
-                      </td>
-                      <td>
-                        <span
-                          className={`status ${
-                            String(order.status || "").includes("Đã")
-                              ? "done"
-                              : "pending"
-                          }`}
-                        >
-                          {order.status || "Chưa xác định"}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="admin-primary"
-                          onClick={() => setSelectedOrder(order)}
-                        >
-                          Xem chi tiết
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={8}>Chưa có đơn hàng nào.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {selectedOrder && (
-        <div
-          role="presentation"
-          onClick={() => setSelectedOrder(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1000,
-            background: "rgba(0,0,0,.58)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Chi tiết đơn hàng ${selectedOrder.id}`}
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              background: "#fff",
-              color: "#222",
-              width: "100%",
-              maxWidth: 760,
-              maxHeight: "90vh",
-              overflowY: "auto",
-              borderRadius: 16,
-              padding: 24,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              <div>
-                <span className="eyebrow">ORDER DETAILS</span>
-                <h2 style={{ margin: "6px 0 18px" }}>
-                  Đơn hàng #{selectedOrder.id}
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                className="outline-btn"
-                onClick={() => setSelectedOrder(null)}
-              >
-                Đóng
-              </button>
-            </div>
-
-            <h3>Thông tin khách hàng</h3>
-
-            <div
-              style={{
-                background: "#f7f7f7",
-                borderRadius: 10,
-                padding: 16,
-                lineHeight: 1.9,
-                marginBottom: 22,
-              }}
-            >
-              <div>
-                <strong>Họ tên:</strong>{" "}
-                {selectedOrder.customer || "Chưa có thông tin"}
-              </div>
-              <div>
-                <strong>Số điện thoại:</strong>{" "}
-                {selectedOrder.phone || "Chưa có thông tin"}
-              </div>
-              <div>
-                <strong>Địa chỉ:</strong>{" "}
-                {selectedOrder.address || "Chưa có thông tin"}
-              </div>
-              <div>
-                <strong>Ngày đặt:</strong> {getOrderDate(selectedOrder)}
-              </div>
-              <div>
-                <strong>Ghi chú:</strong> {selectedOrder.note || "Không có"}
-              </div>
-            </div>
-
-            <h3>Sản phẩm khách đã mua</h3>
-
-            {getItems(selectedOrder).length ? (
-              getItems(selectedOrder).map((item, index) => (
-                <div
-                  key={`${item.productId || item.id || index}-${index}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    padding: "14px 0",
-                    borderBottom: "1px solid #eee",
-                  }}
-                >
-                  {item.image ? (
-                    <img
-                      src={item.image}
-                      alt={getItemName(item)}
-                      style={{
-                        width: 76,
-                        height: 86,
-                        objectFit: "cover",
-                        borderRadius: 8,
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 76,
-                        height: 86,
-                        borderRadius: 8,
-                        background: "#eee",
-                        display: "grid",
-                        placeItems: "center",
-                        fontSize: 12,
-                      }}
-                    >
-                      Không ảnh
-                    </div>
-                  )}
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong>{getItemName(item)}</strong>
-
-                    <p style={{ margin: "6px 0", color: "#777" }}>
-                      Size: {item.size || "Không có"} · Số lượng:{" "}
-                      {Number(item.quantity || 1)}
-                    </p>
-
-                    <p style={{ margin: "4px 0", color: "#777" }}>
-                      Đơn giá: {money(getItemPrice(item))}
-                    </p>
-
-                    <strong>
-                      Thành tiền:{" "}
-                      {money(
-                        getItemPrice(item) *
-                          Number(item.quantity || 1)
-                      )}
-                    </strong>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p style={{ color: "#a16207" }}>
-                Đơn hàng này không có danh sách sản phẩm. Các đơn cũ có thể chưa lưu chi tiết items.
-              </p>
-            )}
-
-            <div
-              style={{
-                marginTop: 22,
-                padding: 16,
-                background: "#f7f7f7",
-                borderRadius: 10,
-              }}
-            >
-              <p>
-                <strong>Phương thức thanh toán:</strong>{" "}
-                {selectedOrder.paymentMethod === "bank_transfer"
-                  ? "Chuyển khoản ngân hàng"
-                  : "Thanh toán khi nhận hàng (COD)"}
-              </p>
-
-              {selectedOrder.paymentReference && (
-                <p>
-                  <strong>Nội dung chuyển khoản:</strong>{" "}
-                  {selectedOrder.paymentReference}
-                </p>
-              )}
-
-              <p>
-                <strong>Trạng thái thanh toán:</strong>{" "}
-                {selectedOrder.paymentStatus || "Chưa có thông tin"}
-              </p>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                  marginTop: 16,
-                }}
-              >
-                <strong>TỔNG THANH TOÁN</strong>
-                <strong style={{ fontSize: 22, color: "#16834a" }}>
-                  {money(selectedOrder.total)}
-                </strong>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
+    <AdminTablePage
+      eyebrow="ORDERS"
+      title="Đơn hàng"
+      description="Theo dõi và xử lý các đơn hàng."
+      columns={[
+        "Mã đơn",
+        "Khách hàng",
+        "Ngày",
+        "Sản phẩm",
+        "Tổng tiền",
+        "Thanh toán",
+        "Trạng thái",
+      ]}
+      rows={orders.map((o) => [
+        o.id,
+        o.customer,
+        o.date,
+        o.items,
+        money(o.total),
+        o.paymentMethod === "bank_transfer"
+          ? "Chuyển khoản"
+          : "COD",
+        o.status,
+      ])}
+    />
   );
 }
 
@@ -1877,7 +1430,6 @@ function AdminTablePage({
               ))}
             </tr>
           </thead>
-
           <tbody>
             {rows.length ? (
               rows.map((r, i) => (
@@ -1909,12 +1461,8 @@ function AdminTablePage({
     </div>
   );
 }
-
 function AdminStatistics({ orders, products }) {
-  const revenue = orders.reduce(
-    (sum, o) => sum + Number(o.total || 0),
-    0
-  );
+  const revenue = orders.reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="admin-page">
@@ -1927,16 +1475,37 @@ function AdminStatistics({ orders, products }) {
       </div>
 
       <div className="stats-grid">
-        <StatCard icon="₫" label="Doanh thu" value={money(revenue)} trend="18.4" />
-        <StatCard icon="□" label="Đơn hàng" value={orders.length} trend="8.2" />
-        <StatCard icon="◇" label="Sản phẩm" value={products.length} trend="12.5" />
-        <StatCard icon="↗" label="Tỷ lệ hoàn tất" value="75%" trend="6.8" />
+        <StatCard
+          icon="₫"
+          label="Doanh thu"
+          value={money(revenue)}
+          trend="18.4"
+        />
+        <StatCard
+          icon="□"
+          label="Đơn hàng"
+          value={orders.length}
+          trend="8.2"
+        />
+        <StatCard
+          icon="◇"
+          label="Sản phẩm"
+          value={products.length}
+          trend="12.5"
+        />
+        <StatCard
+          icon="↗"
+          label="Tỷ lệ hoàn tất"
+          value="75%"
+          trend="6.8"
+        />
       </div>
 
       <section className="panel insight">
         <h3>Ghi chú</h3>
         <p>
-          Các chỉ số được tổng hợp từ dữ liệu đơn hàng và sản phẩm trên Backend.
+          Đây là trang thống kê frontend. Các chỉ số được tính từ dữ liệu
+          localStorage trong trình duyệt.
         </p>
       </section>
     </div>
@@ -1978,9 +1547,8 @@ function AdminSettings({ user }) {
 
 export default function App() {
   const store = useStore();
-
   const cartCount = store.cart.reduce(
-    (sum, item) => sum + Number(item.quantity || 0),
+    (sum, item) => sum + item.quantity,
     0
   );
 
@@ -1990,7 +1558,6 @@ export default function App() {
         path="/login"
         element={<Login onLogin={store.login} />}
       />
-
       <Route
         path="/register"
         element={<Register onRegister={store.register} />}
@@ -2084,7 +1651,10 @@ export default function App() {
           }
         />
 
-        <Route path="/order-success" element={<Success />} />
+        <Route
+          path="/order-success"
+          element={<Success />}
+        />
       </Route>
 
       <Route
@@ -2094,6 +1664,7 @@ export default function App() {
             <AdminLayout
               user={store.user}
               logout={store.logout}
+              products={store.products}
               orders={store.orders}
             />
           </Protected>
@@ -2154,20 +1725,14 @@ export default function App() {
 
 function Login({ onLogin }) {
   const navigate = useNavigate();
-
   const [email, setEmail] = useState("admin@myshop.com");
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
 
     const result = await onLogin(email, password);
-
-    setLoading(false);
 
     if (!result) {
       return setError("Email hoặc mật khẩu không đúng.");
@@ -2186,7 +1751,6 @@ function Login({ onLogin }) {
           Email
           <input
             type="email"
-            required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -2196,7 +1760,6 @@ function Login({ onLogin }) {
           Mật khẩu
           <input
             type="password"
-            required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -2204,8 +1767,8 @@ function Login({ onLogin }) {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button className="dark-btn wide" disabled={loading}>
-          {loading ? "Đang đăng nhập..." : "Đăng nhập →"}
+        <button className="dark-btn wide">
+          Đăng nhập →
         </button>
 
         <div className="demo-note">
@@ -2222,27 +1785,20 @@ function Login({ onLogin }) {
 
 function Register({ onRegister }) {
   const navigate = useNavigate();
-
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
   });
-
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
 
-    const result = await onRegister(form);
+    const r = await onRegister(form);
 
-    setLoading(false);
-
-    if (!result.ok) {
-      return setError(result.message);
+    if (!r.ok) {
+      return setError(r.message);
     }
 
     navigate("/");
@@ -2281,7 +1837,7 @@ function Register({ onRegister }) {
           Mật khẩu
           <input
             required
-            minLength={6}
+            minLength="6"
             type="password"
             value={form.password}
             onChange={(e) =>
@@ -2292,8 +1848,8 @@ function Register({ onRegister }) {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button className="dark-btn wide" disabled={loading}>
-          {loading ? "Đang tạo tài khoản..." : "Tạo tài khoản →"}
+        <button className="dark-btn wide">
+          Tạo tài khoản →
         </button>
 
         <p>
@@ -2316,8 +1872,7 @@ function AuthLayout({ title, subtitle, children }) {
         <div className="auth-art">
           <span>MYSHOP / 2026</span>
           <h2>
-            Quiet design.
-            <br />
+            Quiet design.<br />
             <em>Clear experience.</em>
           </h2>
         </div>
