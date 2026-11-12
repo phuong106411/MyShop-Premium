@@ -1459,21 +1459,21 @@ function AdminOrders({ orders }) {
                     </span>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOrder(order)}
-                      style={{
-                        padding: "8px 14px",
-                        border: "1px solid #2563eb",
-                        borderRadius: "6px",
-                        background: "#2563eb",
-                        color: "#fff",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Chi tiết
-                    </button>
+               <button
+                 type="button"
+                 onClick={() => setSelectedOrder(order)}
+                 style={{
+                   padding: "8px 14px",
+                   border: "1px solid #000000",
+                   borderRadius: "6px",
+                   background: "#000000",
+                   color: "#ffffff",
+                   cursor: "pointer",
+                   whiteSpace: "nowrap",
+              }}
+            >
+              Chi tiết
+            </button>
                   </td>
                 </tr>
               ))
